@@ -3,6 +3,7 @@ anyio==4.11.0
 cachetools==6.2.2
 certifi==2025.11.12
 charset-normalizer==3.4.4
+deepgram-sdk==5.3.0
 google-api-core==2.28.1
 google-api-python-client==2.187.0
 google-auth==2.41.1
