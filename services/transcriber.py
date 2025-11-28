@@ -2,6 +2,7 @@ import os
 import wave
 import pyaudio
 import assemblyai as aai
+import threading
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -9,73 +10,71 @@ load_dotenv()
 class Transcriber:
     def __init__(self):
         self.api_key = os.getenv("ASSEMBLYAI_API_KEY")
-        if not self.api_key:
-            raise ValueError("ASSEMBLYAI_API_KEY missing in .env")
-        
-        # Configure AssemblyAI
         aai.settings.api_key = self.api_key
         
-        # Audio Recording Config
         self.CHUNK = 1024
         self.FORMAT = pyaudio.paInt16
         self.CHANNELS = 1
         self.RATE = 44100
-        self.RECORD_SECONDS = 5
         self.OUTPUT_FILENAME = "command.wav"
-
-    def listen(self):
-        """
-        Records audio for 5 seconds and transcribes it using AssemblyAI.
-        """
-        print(f"👂 Listening for {self.RECORD_SECONDS} seconds...")
         
-        p = pyaudio.PyAudio()
-        stream = p.open(format=self.FORMAT,
+        self.frames = []
+        self.is_recording = False
+        self.stream = None
+        self.p = None
+
+    def start_recording(self):
+        """Starts recording audio in a background thread."""
+        self.frames = []
+        self.is_recording = True
+        self.p = pyaudio.PyAudio()
+        self.stream = self.p.open(format=self.FORMAT,
                         channels=self.CHANNELS,
                         rate=self.RATE,
                         input=True,
                         frames_per_buffer=self.CHUNK)
+        
+        # Start the listener thread
+        threading.Thread(target=self._record_loop, daemon=True).start()
+        print("🔴 Recording started...")
 
-        frames = []
+    def _record_loop(self):
+        """Internal loop to grab audio chunks."""
+        while self.is_recording:
+            data = self.stream.read(self.CHUNK)
+            self.frames.append(data)
 
-        # 1. Record Audio
-        for i in range(0, int(self.RATE / self.CHUNK * self.RECORD_SECONDS)):
-            data = stream.read(self.CHUNK)
-            frames.append(data)
+    def stop_recording(self):
+        """Stops recording, saves file, and returns the transcript."""
+        print("⏹️ Recording stopped. Processing...")
+        self.is_recording = False
+        
+        # Cleanup Audio
+        if self.stream:
+            self.stream.stop_stream()
+            self.stream.close()
+        if self.p:
+            self.p.terminate()
 
-        print("✅ Recording complete. Transcribing...")
-
-        stream.stop_stream()
-        stream.close()
-        p.terminate()
-
-        # Save to file locally
+        # Save File
         wf = wave.open(self.OUTPUT_FILENAME, 'wb')
         wf.setnchannels(self.CHANNELS)
-        wf.setsampwidth(p.get_sample_size(self.FORMAT))
+        wf.setsampwidth(self.p.get_sample_size(self.FORMAT))
         wf.setframerate(self.RATE)
-        wf.writeframes(b''.join(frames))
+        wf.writeframes(b''.join(self.frames))
         wf.close()
 
-        # 2. Send to AssemblyAI
+        # Transcribe
+        return self._transcribe_file()
+
+    def _transcribe_file(self):
         try:
             transcriber = aai.Transcriber()
             transcript = transcriber.transcribe(self.OUTPUT_FILENAME)
-
+            
             if transcript.status == aai.TranscriptStatus.error:
-                print(f"❌ Transcription Error: {transcript.error}")
-                return ""
-
-            text = transcript.text
-            print(f"📝 You said: '{text}'")
-            return text
-
+                return f"Error: {transcript.error}"
+            
+            return transcript.text or ""
         except Exception as e:
-            print(f"❌ Transcription Error: {e}")
-            return ""
-
-# --- TEST BLOCK ---
-if __name__ == "__main__":
-    ear = Transcriber()
-    input("Press Enter to start recording...")
-    text = ear.listen()
+            return f"Error: {e}"
