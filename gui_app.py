@@ -23,12 +23,9 @@ class ModernLightApp:
         self.cached_analyses = [] 
 
         # --- DYNAMIC UI COMPONENTS ---
-        # These columns will be injected into the view later
         self.col_positive = ft.Column(spacing=10, scroll=ft.ScrollMode.AUTO)
         self.col_neutral = ft.Column(spacing=10, scroll=ft.ScrollMode.AUTO)
         self.col_negative = ft.Column(spacing=10, scroll=ft.ScrollMode.AUTO)
-        
-        # This Container holds the Middle Section (Empty / Loading / Columns)
         self.middle_content_area = ft.Container(expand=True)
 
         # --- Build Views ---
@@ -55,7 +52,6 @@ class ModernLightApp:
         self.content_area = ft.Container(content=self.dashboard_view, expand=True, padding=30, bgcolor=ft.Colors.BLUE_GREY_50)
         self.page.add(ft.Row([ft.Container(self.sidebar, shadow=ft.BoxShadow(blur_radius=10, color=ft.Colors.GREY_200)), self.content_area], expand=True, spacing=0))
         
-        # Set Initial State (Empty)
         self.show_empty_state()
         self.page.run_task(self.initial_greeting)
 
@@ -66,19 +62,15 @@ class ModernLightApp:
         self.page.window_height = 850
         self.page.bgcolor = ft.Colors.BLUE_GREY_50
         self.page.padding = 0
-        # Add a SnackBar for Drafting Notifications
         self.page.snack_bar = ft.SnackBar(content=ft.Text("Action Completed"), action="OK")
 
     # ==========================
     # 1. VIEW BUILDERS
     # ==========================
-    
     def build_dashboard(self):
-        # Header Components
         self.status_ring = ft.Container(width=12, height=12, border_radius=12, bgcolor=ft.Colors.RED_400, animate=ft.Animation(500, ft.AnimationCurve.BOUNCE_OUT))
         self.status_text = ft.Text("OFFLINE", size=12, weight="bold", color=ft.Colors.GREY_500)
 
-        # Mic Components
         self.mic_icon = ft.Icon(name=ft.Icons.MIC_NONE, size=40, color=ft.Colors.WHITE)
         self.mic_btn = ft.Container(
             content=self.mic_icon, width=90, height=90, border_radius=45,
@@ -90,26 +82,18 @@ class ModernLightApp:
         self.visualizer = ft.Container(width=90, height=90, border_radius=45, bgcolor=ft.Colors.BLUE_100, opacity=0, animate_opacity=300, animate_scale=500)
 
         return ft.Column([
-            # Top Bar
             ft.Row([
                 ft.Column([ft.Text("Welcome back, Manager", size=28, weight="bold", color=ft.Colors.BLUE_GREY_900), ft.Text("Voice Operations Center", size=14, color=ft.Colors.GREY_500)]),
                 ft.Container(expand=True),
                 ft.Container(content=ft.Row([self.status_ring, self.status_text], spacing=10), padding=ft.padding.symmetric(horizontal=15, vertical=8), bgcolor=ft.Colors.WHITE, border_radius=20, shadow=ft.BoxShadow(blur_radius=10, color=ft.Colors.GREY_200))
             ]),
             ft.Container(height=20),
-            
-            # --- DYNAMIC MIDDLE AREA (Empty / Loading / Columns) ---
             self.middle_content_area,
-
             ft.Container(height=20),
-            
-            # Bottom Mic
             ft.Container(height=160, content=ft.Column([ft.Stack([ft.Container(self.visualizer, alignment=ft.alignment.center), ft.Container(self.mic_btn, alignment=ft.alignment.center)], alignment=ft.alignment.center), ft.Container(height=15), ft.Text("Tap to Speak", size=13, weight="bold", color=ft.Colors.GREY_400)], horizontal_alignment=ft.CrossAxisAlignment.CENTER))
         ])
 
-    # --- DYNAMIC VIEW STATES ---
     def show_empty_state(self):
-        """Displays the boring 'Nothing analyzed' view"""
         content = ft.Container(
             content=ft.Column([
                 ft.Icon(ft.Icons.ANALYTICS_OUTLINED, size=80, color=ft.Colors.GREY_300),
@@ -123,7 +107,6 @@ class ModernLightApp:
         self.page.update()
 
     def show_loading_state(self):
-        """Displays the Loading Animation"""
         content = ft.Container(
             content=ft.Column([
                 ft.ProgressRing(width=60, height=60, stroke_width=5, color=ft.Colors.INDIGO_500),
@@ -138,7 +121,6 @@ class ModernLightApp:
         self.page.update()
 
     def show_results_state(self):
-        """Displays the 3 Columns"""
         content = ft.Container(
             content=ft.Row([
                 self.build_column_container("Positive", ft.Colors.GREEN_500, self.col_positive),
@@ -164,12 +146,9 @@ class ModernLightApp:
         return ft.Column([ft.Text("System Logs", size=28, weight="bold", color=ft.Colors.BLUE_GREY_900), ft.Container(height=10), ft.Container(content=self.full_log_list, expand=True, bgcolor=ft.Colors.WHITE, border_radius=20, padding=20, shadow=ft.BoxShadow(blur_radius=10, color=ft.Colors.GREY_200))])
 
     def build_settings_page(self):
-        """Restored Full Settings Page"""
         return ft.Column([
             ft.Text("Configuration", size=28, weight="bold", color=ft.Colors.BLUE_GREY_900),
             ft.Container(height=20),
-            
-            # Voice Engine Card
             ft.Container(
                 bgcolor=ft.Colors.WHITE, padding=25, border_radius=20,
                 shadow=ft.BoxShadow(blur_radius=10, color=ft.Colors.GREY_200),
@@ -179,21 +158,13 @@ class ModernLightApp:
                     ft.Dropdown(
                         label="Murf Voice ID",
                         value="en-US-natalie",
-                        options=[
-                            ft.dropdown.Option("en-US-natalie"),
-                            ft.dropdown.Option("en-US-falcon-male"),
-                            ft.dropdown.Option("hi-IN-namrita"),
-                        ],
-                        border_radius=10,
-                        border_color=ft.Colors.GREY_300,
-                        focused_border_color=ft.Colors.INDIGO
+                        options=[ft.dropdown.Option("en-US-natalie"), ft.dropdown.Option("en-US-falcon-male"), ft.dropdown.Option("hi-IN-namrita")],
+                        border_radius=10, border_color=ft.Colors.GREY_300, focused_border_color=ft.Colors.INDIGO
                     ),
                     ft.Slider(min=0, max=100, divisions=10, value=80, label="Speed: {value}%", active_color=ft.Colors.INDIGO),
                 ])
             ),
             ft.Container(height=20),
-            
-            # API Connections Card
             ft.Container(
                 bgcolor=ft.Colors.WHITE, padding=25, border_radius=20,
                 shadow=ft.BoxShadow(blur_radius=10, color=ft.Colors.GREY_200),
@@ -254,36 +225,37 @@ class ModernLightApp:
         
         intent_data = determine_intent(transcript)
         action = intent_data.action; lang = intent_data.language
-        self.add_log_entry(f"Action: {action} | Lang: {lang}", "Intent", ft.Colors.BLUE_GREY_400)
+        self.add_log_entry(f"Action: {action} | Lang: {lang} | Key: {intent_data.keywords}", "Intent", ft.Colors.BLUE_GREY_400)
 
         if action == "ANALYZE_NEW":
             if lang == "hi": self.speak_system("Thik hai. Inbox scan kar raha hoon.", language_code="hi")
             else: self.speak_system("Sure, scanning your inbox now.")
             self.run_analysis_workflow(use_cache=False, language=lang)
-        elif action == "SUMMARIZE_HINDI":
+            
+        # --- CHANGED: Renamed Action ---
+        elif action == "SUMMARIZE_SPECIFIC":
             target = intent_data.keywords
-            if target and target.lower() != "none": self.explain_specific_email_hindi(target)
-            else: self.speak_system("Thik hai.", language_code="hi"); self.run_analysis_workflow(language="hi", use_cache=True)
+            if target and target.lower() != "none":
+                # Calls the generic explainer (which handles English OR Hindi internally)
+                self.explain_specific_email(target, language=lang)
+            else:
+                self.speak_system("Which email?", language_code=lang)
+                
         elif action == "GET_SENTIMENT_STATS": self.run_sentiment_report()
         elif action == "FILTER_BY_CATEGORY": self.run_analysis_workflow(filter_keyword=intent_data.keywords, use_cache=False)
         elif action == "DRAFT_REPLY": self.run_drafting_workflow(intent_data.keywords)
-        elif action == "EXIT": self.speak_system("Goodbye."); self.page.window_close()
+        elif action == "EXIT":
+            self.speak_system("Goodbye.")
+            self.page.window.destroy()
         else: self.speak_system("I didn't understand."); self.set_status("READY", ft.Colors.GREEN_500)
 
     # --- CORE WORKFLOW ---
     def run_analysis_workflow(self, language="en", filter_keyword=None, use_cache=False):
         self.set_status("ANALYZING", ft.Colors.PURPLE_500)
         
-        # 1. VISUAL STATE: LOADING
-        if not use_cache:
-            self.show_loading_state()
+        if not use_cache: self.show_loading_state()
+        self.col_positive.controls.clear(); self.col_neutral.controls.clear(); self.col_negative.controls.clear()
         
-        # 2. CLEAR COLUMNS
-        self.col_positive.controls.clear()
-        self.col_neutral.controls.clear()
-        self.col_negative.controls.clear()
-        
-        # 3. DATA PROCESSING
         if use_cache and self.cached_analyses:
             analyses_data = self.cached_analyses
         else:
@@ -292,8 +264,7 @@ class ModernLightApp:
                 emails = email_bot.fetch_recent_emails(count=6)
                 if not emails:
                     self.speak_system("No emails found.", language_code=language)
-                    self.show_empty_state()
-                    self.set_status("READY", ft.Colors.GREEN_500); return
+                    self.show_empty_state(); self.set_status("READY", ft.Colors.GREEN_500); return
                 
                 analyses_data = []
                 for i, mail in enumerate(emails):
@@ -301,19 +272,16 @@ class ModernLightApp:
                     analysis_result = analyze_email(full_text)
                     email_bot.log_to_sheet(analysis_result)
                     analyses_data.append({'id': i+1, 'data': analysis_result})
-                
                 self.cached_analyses = analyses_data
             except Exception as e:
                 self.speak_system("Error occurred."); print(e); self.show_empty_state(); return
 
-        # 4. RENDER UI
         self.show_results_state() 
         for item in analyses_data:
             if filter_keyword and filter_keyword.lower() not in (item['data'].category + item['data'].summary).lower(): continue 
             self.add_dashboard_card(item['id'], item['data'])
         self.page.update()
 
-        # 5. SPEAK RESULTS
         negative_count = 0
         summaries = []
         for item in analyses_data:
@@ -326,7 +294,12 @@ class ModernLightApp:
 
         if language == "hi":
              self.speak_system(f"Mujhe {negative_count} negative emails mile hain.", language_code="hi")
-             if negative_count > 0: self.speak_system("Kripya check karein.", language_code="hi")
+             # --- HINDI LOOP ---
+             for item in analyses_data:
+                 if item['data'].sentiment == "Negative":
+                     details = f"{item['data'].summary}. Recommendation: {item['data'].recommendation}"
+                     hindi_details = translate_to_hindi(details)
+                     self.speak_system(f"Email {item['id']}: {hindi_details}", language_code="hi")
         else:
             if summaries:
                 self.speak_system(f"Analysis complete.")
@@ -336,9 +309,9 @@ class ModernLightApp:
         
         self.set_status("READY", ft.Colors.GREEN_500)
 
-    # --- HELPERS ---
-    def explain_specific_email_hindi(self, target_keyword):
-        self.set_status("TRANSLATING", ft.Colors.ORANGE_400)
+    # --- HELPERS (Renamed to be generic) ---
+    def explain_specific_email(self, target_keyword, language="en"):
+        self.set_status("ANALYZING", ft.Colors.ORANGE_400)
         target_id = self.parse_number_word(target_keyword)
         target_item = None
         if target_id:
@@ -348,12 +321,21 @@ class ModernLightApp:
              for item in self.cached_analyses:
                 if target_keyword.lower() in item['data'].customer_name.lower(): target_item = item; break
 
-        if not target_item: self.speak_system(f"Email {target_keyword} nahi mila.", language_code="hi"); self.set_status("READY", ft.Colors.GREEN_500); return
+        if not target_item:
+            msg = f"Email {target_keyword} nahi mila." if language == "hi" else f"I couldn't find email {target_keyword}."
+            self.speak_system(msg, language_code=language)
+            self.set_status("READY", ft.Colors.GREEN_500)
+            return
 
-        original_summary = target_item['data'].summary
-        hindi_summary = translate_to_hindi(original_summary)
-        self.speak_system(f"Email {target_item['id']} ka summary:", language_code="hi")
-        self.speak_system(hindi_summary, language_code="hi")
+        # Prepare Text
+        summary_text = f"Email {target_item['id']} from {target_item['data'].customer_name}. {target_item['data'].summary}"
+        
+        # Translate if needed
+        if language == "hi":
+            self.set_status("TRANSLATING", ft.Colors.ORANGE_400)
+            summary_text = translate_to_hindi(summary_text)
+        
+        self.speak_system(summary_text, language_code=language)
         self.set_status("READY", ft.Colors.GREEN_500)
 
     def run_drafting_workflow(self, target_keyword):
@@ -379,8 +361,7 @@ class ModernLightApp:
         
         if success:
             self.speak_system(f"Draft created successfully.")
-            self.page.snack_bar.open = True
-            self.page.update()
+            self.page.snack_bar.open = True; self.page.update()
         else: self.speak_system("Failed to create draft.")
         self.set_status("READY", ft.Colors.GREEN_500)
 
