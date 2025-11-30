@@ -164,7 +164,47 @@ class ModernLightApp:
         return ft.Column([ft.Text("System Logs", size=28, weight="bold", color=ft.Colors.BLUE_GREY_900), ft.Container(height=10), ft.Container(content=self.full_log_list, expand=True, bgcolor=ft.Colors.WHITE, border_radius=20, padding=20, shadow=ft.BoxShadow(blur_radius=10, color=ft.Colors.GREY_200))])
 
     def build_settings_page(self):
-        return ft.Column([ft.Text("Configuration", size=28, weight="bold", color=ft.Colors.BLUE_GREY_900), ft.Container(height=20), ft.Container(bgcolor=ft.Colors.WHITE, padding=25, border_radius=20, shadow=ft.BoxShadow(blur_radius=10, color=ft.Colors.GREY_200), content=ft.Column([ft.Row([ft.Icon(ft.Icons.RECORD_VOICE_OVER, color=ft.Colors.INDIGO), ft.Text("Voice Engine", weight="bold", size=16)]), ft.Divider(height=20, color=ft.Colors.TRANSPARENT), ft.Dropdown(label="Murf Voice ID", value="en-US-natalie", options=[ft.dropdown.Option("en-US-natalie"), ft.dropdown.Option("en-US-falcon-male"), ft.dropdown.Option("hi-IN-namrita")], border_radius=10, border_color=ft.Colors.GREY_300, focused_border_color=ft.Colors.INDIGO), ft.Slider(min=0, max=100, divisions=10, value=80, label="Speed: {value}%", active_color=ft.Colors.INDIGO)]))])
+        """Restored Full Settings Page"""
+        return ft.Column([
+            ft.Text("Configuration", size=28, weight="bold", color=ft.Colors.BLUE_GREY_900),
+            ft.Container(height=20),
+            
+            # Voice Engine Card
+            ft.Container(
+                bgcolor=ft.Colors.WHITE, padding=25, border_radius=20,
+                shadow=ft.BoxShadow(blur_radius=10, color=ft.Colors.GREY_200),
+                content=ft.Column([
+                    ft.Row([ft.Icon(ft.Icons.RECORD_VOICE_OVER, color=ft.Colors.INDIGO), ft.Text("Voice Engine", weight="bold", size=16)]),
+                    ft.Divider(height=20, color=ft.Colors.TRANSPARENT),
+                    ft.Dropdown(
+                        label="Murf Voice ID",
+                        value="en-US-natalie",
+                        options=[
+                            ft.dropdown.Option("en-US-natalie"),
+                            ft.dropdown.Option("en-US-falcon-male"),
+                            ft.dropdown.Option("hi-IN-namrita"),
+                        ],
+                        border_radius=10,
+                        border_color=ft.Colors.GREY_300,
+                        focused_border_color=ft.Colors.INDIGO
+                    ),
+                    ft.Slider(min=0, max=100, divisions=10, value=80, label="Speed: {value}%", active_color=ft.Colors.INDIGO),
+                ])
+            ),
+            ft.Container(height=20),
+            
+            # API Connections Card
+            ft.Container(
+                bgcolor=ft.Colors.WHITE, padding=25, border_radius=20,
+                shadow=ft.BoxShadow(blur_radius=10, color=ft.Colors.GREY_200),
+                content=ft.Column([
+                    ft.Row([ft.Icon(ft.Icons.SECURITY, color=ft.Colors.TEAL), ft.Text("API Connections", weight="bold", size=16)]),
+                    ft.Divider(height=20, color=ft.Colors.TRANSPARENT),
+                    ft.TextField(label="Murf API Key", value="••••••••••••••••", password=True, disabled=True, border_radius=10, border_color=ft.Colors.GREY_300),
+                    ft.TextField(label="AssemblyAI Key", value="••••••••••••••••", password=True, disabled=True, border_radius=10, border_color=ft.Colors.GREY_300),
+                ])
+            )
+        ], scroll=ft.ScrollMode.AUTO)
 
     # ==========================
     # 2. LOGIC & EVENTS
@@ -235,11 +275,10 @@ class ModernLightApp:
         self.set_status("ANALYZING", ft.Colors.PURPLE_500)
         
         # 1. VISUAL STATE: LOADING
-        # Only show loading screen if it's a FRESH run (not just re-filtering cache)
         if not use_cache:
             self.show_loading_state()
         
-        # 2. CLEAR PREVIOUS COLUMNS
+        # 2. CLEAR COLUMNS
         self.col_positive.controls.clear()
         self.col_neutral.controls.clear()
         self.col_negative.controls.clear()
@@ -253,7 +292,7 @@ class ModernLightApp:
                 emails = email_bot.fetch_recent_emails(count=6)
                 if not emails:
                     self.speak_system("No emails found.", language_code=language)
-                    self.show_empty_state() # Go back to empty if nothing found
+                    self.show_empty_state()
                     self.set_status("READY", ft.Colors.GREEN_500); return
                 
                 analyses_data = []
@@ -268,9 +307,7 @@ class ModernLightApp:
                 self.speak_system("Error occurred."); print(e); self.show_empty_state(); return
 
         # 4. RENDER UI
-        # Now that we have data, switch to Results View
         self.show_results_state() 
-        
         for item in analyses_data:
             if filter_keyword and filter_keyword.lower() not in (item['data'].category + item['data'].summary).lower(): continue 
             self.add_dashboard_card(item['id'], item['data'])
@@ -342,7 +379,6 @@ class ModernLightApp:
         
         if success:
             self.speak_system(f"Draft created successfully.")
-            # SHOW SUCCESS NOTIFICATION (SnackBar)
             self.page.snack_bar.open = True
             self.page.update()
         else: self.speak_system("Failed to create draft.")
