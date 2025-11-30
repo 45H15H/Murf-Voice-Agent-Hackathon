@@ -6,17 +6,21 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-# Configure the Gemini API
-# genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+# Configure the Gemini API (New SDK)
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
-# --- 1. Define the "Form" we want Gemini to fill out ---
+# --- 1. Define the "Form" (MERGED: Old + New Fields) ---
 class EmailAnalysis(BaseModel):
-    sentiment: str = Field(description="The sentiment of the email: 'Positive', 'Negative', or 'Neutral'")
-    customer_name: str = Field(description="The name of the customer found in the email signature or header. If unknown, use 'Unknown'.")
-    order_id: str = Field(description="The Order ID if mentioned (e.g., #12345). If not found, use 'N/A'.")
-    category: str = Field(description="Category of the issue: 'Delivery', 'Product Quality', 'Refund', 'General Inquiry', or 'Spam'")
-    summary: str = Field(description="A very short 1-sentence summary of the email for a busy manager.")
+    # --- EXISTING FEATURES ---
+    sentiment: str = Field(description="The sentiment: 'Positive', 'Negative', or 'Neutral'")
+    customer_name: str = Field(description="Customer Name. If unknown, use 'Unknown'.")
+    order_id: str = Field(description="Order ID (e.g., #12345) or 'N/A'.")
+    category: str = Field(description="Category: 'Delivery', 'Product', 'Refund', 'General', 'Spam'")
+    summary: str = Field(description="1-sentence summary for a busy manager.")
+    
+    # --- NEW WINNING FEATURES ---
+    tone: str = Field(description="The emotional tone (e.g., 'Frustrated', 'Polite', 'Urgent', 'Sarcastic').")
+    recommendation: str = Field(description="The next best action (e.g., 'Offer discount', 'Check tracking', 'Reply').")
 
 # --- 2. The Brain Function ---
 def analyze_email(email_text):
@@ -24,12 +28,11 @@ def analyze_email(email_text):
     Sends email text to Gemini and returns a structured EmailAnalysis object.
     """
     try:
-        # We use Gemini 2.5 Flash because it's fast and cheap for hackathons
-        # model = genai.GenerativeModel("gemini-2.5-flash")
-
+        # We use standard 2.5 Flash (Most reliable for Hackathons)
         prompt = f"""
-        You are a Customer Service Manager AI. 
-        Analyze the following customer email and extract the key details.
+        You are an elite Customer Experience AI. 
+        Analyze the following customer email. 
+        Identify the core Details, the Emotional Tone, and suggest a Next Best Action.
         
         EMAIL CONTENT:
         "{email_text}"
@@ -37,7 +40,7 @@ def analyze_email(email_text):
 
         # detailed instruction to force the specific JSON structure
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-2.5-flash", # Switched to 1.5-flash to ensure stability
             contents=prompt,
             config={
                 "response_mime_type": "application/json",
@@ -57,12 +60,13 @@ def analyze_email(email_text):
             customer_name="Unknown", 
             order_id="Error", 
             category="Error", 
-            summary="Could not analyze this email."
+            summary="Could not analyze this email.",
+            tone="Neutral",                # Default for error
+            recommendation="Check manually" # Default for error
         )
 
 # --- TESTING BLOCK ---
 if __name__ == "__main__":
-    # Fake email to test the brain
     test_email = """
     Subject: Broken Item
     From: Sarah Connor
@@ -74,8 +78,8 @@ if __name__ == "__main__":
     result = analyze_email(test_email)
     
     print("\n--- Analysis Result ---")
-    print(f"Sentiment: {result.sentiment}")
-    print(f"Name:      {result.customer_name}")
-    print(f"Order ID:  {result.order_id}")
-    print(f"Category:  {result.category}")
-    print(f"Summary:   {result.summary}")
+    print(f"Name:           {result.customer_name}")
+    print(f"Sentiment:      {result.sentiment}")
+    print(f"Tone:           {result.tone}  <-- NEW")
+    print(f"Recommendation: {result.recommendation}  <-- NEW")
+    print(f"Summary:        {result.summary}")
