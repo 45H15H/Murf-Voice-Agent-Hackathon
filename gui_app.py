@@ -1,8 +1,9 @@
 import flet as ft
 import threading
 import time
+import re
 from services.email_manager import EmailManager
-from services.llm_brain import analyze_email
+from services.llm_brain import analyze_email, generate_email_reply, translate_to_hindi
 from services.murf_tts import VoiceEngine
 from services.transcriber import Transcriber
 from services.intent_router import determine_intent
@@ -17,9 +18,9 @@ class ModernLightApp:
         self.ears = Transcriber()
         self.is_recording = False
         
-        # --- MEMORY (The "Agent" Upgrade) ---
+        # --- MEMORY ---
         self.log_history = [] 
-        self.cached_analyses = [] # <--- STORES THE LAST RESULTS
+        self.cached_analyses = [] 
 
         # --- Build Views ---
         self.dashboard_view = self.build_dashboard()
@@ -56,7 +57,7 @@ class ModernLightApp:
     def setup_page(self):
         self.page.title = "Murf Falcon Agent"
         self.page.theme_mode = ft.ThemeMode.LIGHT
-        self.page.window_width = 1100
+        self.page.window_width = 1200
         self.page.window_height = 850
         self.page.bgcolor = ft.Colors.BLUE_GREY_50
         self.page.padding = 0
@@ -65,21 +66,25 @@ class ModernLightApp:
     # 1. VIEW BUILDERS
     # ==========================
     def build_dashboard(self):
+        # Status & Mic
         self.status_ring = ft.Container(width=12, height=12, border_radius=12, bgcolor=ft.Colors.RED_400, animate=ft.Animation(500, ft.AnimationCurve.BOUNCE_OUT))
         self.status_text = ft.Text("OFFLINE", size=12, weight="bold", color=ft.Colors.GREY_500)
 
         self.mic_icon = ft.Icon(name=ft.Icons.MIC_NONE, size=40, color=ft.Colors.WHITE)
         self.mic_btn = ft.Container(
             content=self.mic_icon, width=90, height=90, border_radius=45,
-            gradient=ft.LinearGradient(begin=ft.alignment.top_left, end=ft.alignment.bottom_right, colors=[ft.Colors.BLUE_400, ft.Colors.INDIGO_500]),
+            gradient=ft.LinearGradient(colors=[ft.Colors.BLUE_400, ft.Colors.INDIGO_500]),
             alignment=ft.alignment.center, on_click=self.toggle_recording, on_hover=self.animate_hover,
             animate_scale=ft.Animation(100, ft.AnimationCurve.EASE_OUT), animate=ft.Animation(300, ft.AnimationCurve.EASE_OUT),
             shadow=ft.BoxShadow(blur_radius=20, color=ft.Colors.BLUE_200, spread_radius=5)
         )
-        
         self.visualizer = ft.Container(width=90, height=90, border_radius=45, bgcolor=ft.Colors.BLUE_100, opacity=0, animate_opacity=300, animate_scale=500)
-        self.mini_log_list = ft.ListView(expand=True, spacing=15, auto_scroll=True)
-        
+
+        # 3 Columns
+        self.col_positive = ft.Column(spacing=10, scroll=ft.ScrollMode.AUTO)
+        self.col_neutral = ft.Column(spacing=10, scroll=ft.ScrollMode.AUTO)
+        self.col_negative = ft.Column(spacing=10, scroll=ft.ScrollMode.AUTO)
+
         return ft.Column([
             ft.Row([
                 ft.Column([ft.Text("Welcome back, Manager", size=28, weight="bold", color=ft.Colors.BLUE_GREY_900), ft.Text("Voice Operations Center", size=14, color=ft.Colors.GREY_500)]),
@@ -87,10 +92,31 @@ class ModernLightApp:
                 ft.Container(content=ft.Row([self.status_ring, self.status_text], spacing=10), padding=ft.padding.symmetric(horizontal=15, vertical=8), bgcolor=ft.Colors.WHITE, border_radius=20, shadow=ft.BoxShadow(blur_radius=10, color=ft.Colors.GREY_200))
             ]),
             ft.Container(height=20),
-            ft.Container(content=ft.Column([ft.Text("RECENT INSIGHTS", size=11, weight="bold", color=ft.Colors.GREY_600), ft.Container(content=self.mini_log_list, expand=True, padding=10)]), expand=True, bgcolor=ft.Colors.WHITE, border_radius=25, padding=20, shadow=ft.BoxShadow(blur_radius=15, color=ft.Colors.GREY_200, offset=ft.Offset(0, 5))),
-            ft.Container(height=30),
-            ft.Container(height=180, content=ft.Column([ft.Stack([ft.Container(self.visualizer, alignment=ft.alignment.center), ft.Container(self.mic_btn, alignment=ft.alignment.center)], alignment=ft.alignment.center), ft.Container(height=15), ft.Text("Tap to Speak", size=13, weight="bold", color=ft.Colors.GREY_400)], horizontal_alignment=ft.CrossAxisAlignment.CENTER))
+            
+            ft.Container(
+                content=ft.Row([
+                    self.build_column_container("Positive", ft.Colors.GREEN_500, self.col_positive),
+                    self.build_column_container("Neutral", ft.Colors.BLUE_GREY_400, self.col_neutral),
+                    self.build_column_container("Negative", ft.Colors.RED_500, self.col_negative),
+                ], alignment=ft.MainAxisAlignment.START, vertical_alignment=ft.CrossAxisAlignment.START, expand=True),
+                expand=True
+            ),
+
+            ft.Container(height=20),
+            ft.Container(height=160, content=ft.Column([ft.Stack([ft.Container(self.visualizer, alignment=ft.alignment.center), ft.Container(self.mic_btn, alignment=ft.alignment.center)], alignment=ft.alignment.center), ft.Container(height=15), ft.Text("Tap to Speak", size=13, weight="bold", color=ft.Colors.GREY_400)], horizontal_alignment=ft.CrossAxisAlignment.CENTER))
         ])
+
+    def build_column_container(self, title, color, col_control):
+        return ft.Container(
+            content=ft.Column([
+                ft.Container(
+                    content=ft.Row([ft.Icon(ft.Icons.CIRCLE, size=10, color=color), ft.Text(title, weight="bold", color=ft.Colors.GREY_800)]),
+                    padding=10, border=ft.border.only(bottom=ft.border.BorderSide(1, ft.Colors.GREY_200))
+                ),
+                ft.Container(content=col_control, padding=10, expand=True)
+            ]),
+            expand=True, bgcolor=ft.Colors.WHITE, border_radius=15, shadow=ft.BoxShadow(blur_radius=10, color=ft.Colors.GREY_200)
+        )
 
     def build_logs_page(self):
         self.full_log_list = ft.ListView(expand=True, spacing=10)
@@ -98,233 +124,271 @@ class ModernLightApp:
 
     def build_settings_page(self):
         return ft.Column([
-            ft.Text("Configuration", size=28, weight="bold", color=ft.Colors.BLUE_GREY_900), ft.Container(height=20),
-            ft.Container(bgcolor=ft.Colors.WHITE, padding=25, border_radius=20, shadow=ft.BoxShadow(blur_radius=10, color=ft.Colors.GREY_200), content=ft.Column([ft.Row([ft.Icon(ft.Icons.RECORD_VOICE_OVER, color=ft.Colors.INDIGO), ft.Text("Voice Engine", weight="bold", size=16)]), ft.Divider(height=20, color=ft.Colors.TRANSPARENT), ft.Dropdown(label="Murf Voice ID", value="en-US-natalie", options=[ft.dropdown.Option("en-US-natalie"), ft.dropdown.Option("en-US-falcon-male"), ft.dropdown.Option("hi-IN-namrita")], border_radius=10, border_color=ft.Colors.GREY_300, focused_border_color=ft.Colors.INDIGO), ft.Slider(min=0, max=100, divisions=10, value=80, label="Speed: {value}%", active_color=ft.Colors.INDIGO)])),
+            ft.Text("Configuration", size=28, weight="bold", color=ft.Colors.BLUE_GREY_900),
             ft.Container(height=20),
-            ft.Container(bgcolor=ft.Colors.WHITE, padding=25, border_radius=20, shadow=ft.BoxShadow(blur_radius=10, color=ft.Colors.GREY_200), content=ft.Column([ft.Row([ft.Icon(ft.Icons.SECURITY, color=ft.Colors.TEAL), ft.Text("API Connections", weight="bold", size=16)]), ft.Divider(height=20, color=ft.Colors.TRANSPARENT), ft.TextField(label="Murf API Key", value="••••••••••••••••", password=True, disabled=True, border_radius=10, border_color=ft.Colors.GREY_300), ft.TextField(label="AssemblyAI Key", value="••••••••••••••••", password=True, disabled=True, border_radius=10, border_color=ft.Colors.GREY_300)]))
+            ft.Container(
+                bgcolor=ft.Colors.WHITE, padding=25, border_radius=20,
+                shadow=ft.BoxShadow(blur_radius=10, color=ft.Colors.GREY_200),
+                content=ft.Column([
+                    ft.Row([ft.Icon(ft.Icons.RECORD_VOICE_OVER, color=ft.Colors.INDIGO), ft.Text("Voice Engine", weight="bold", size=16)]),
+                    ft.Divider(height=20, color=ft.Colors.TRANSPARENT),
+                    ft.Dropdown(
+                        label="Murf Voice ID",
+                        value="en-US-natalie",
+                        options=[ft.dropdown.Option("en-US-natalie"), ft.dropdown.Option("en-US-falcon-male"), ft.dropdown.Option("hi-IN-namrita")],
+                        border_radius=10, border_color=ft.Colors.GREY_300, focused_border_color=ft.Colors.INDIGO
+                    ),
+                    ft.Slider(min=0, max=100, divisions=10, value=80, label="Speed: {value}%", active_color=ft.Colors.INDIGO),
+                ])
+            ),
+            ft.Container(height=20),
+            ft.Container(
+                bgcolor=ft.Colors.WHITE, padding=25, border_radius=20,
+                shadow=ft.BoxShadow(blur_radius=10, color=ft.Colors.GREY_200),
+                content=ft.Column([
+                    ft.Row([ft.Icon(ft.Icons.SECURITY, color=ft.Colors.TEAL), ft.Text("API Connections", weight="bold", size=16)]),
+                    ft.Divider(height=20, color=ft.Colors.TRANSPARENT),
+                    ft.TextField(label="Murf API Key", value="••••••••••••••••", password=True, disabled=True, border_radius=10, border_color=ft.Colors.GREY_300),
+                    ft.TextField(label="AssemblyAI Key", value="••••••••••••••••", password=True, disabled=True, border_radius=10, border_color=ft.Colors.GREY_300),
+                ])
+            )
         ], scroll=ft.ScrollMode.AUTO)
 
     # ==========================
     # 2. LOGIC & EVENTS
     # ==========================
-    def animate_hover(self, e):
-        e.control.scale = 1.1 if e.data == "true" else 1.0
-        e.control.update()
-
+    def animate_hover(self, e): e.control.scale = 1.1 if e.data == "true" else 1.0; e.control.update()
+    
     def switch_tab(self, e):
         index = e.control.selected_index
         if index == 0: self.content_area.content = self.dashboard_view
         elif index == 1: self.refresh_full_logs(); self.content_area.content = self.logs_view
         elif index == 2: self.content_area.content = self.settings_view
         self.page.update()
-
+    
     async def initial_greeting(self):
-        self.add_log_entry("System initialized.", "System")
+        self.speak_system("System ready.")
         self.set_status("READY", ft.Colors.GREEN_500)
-        self.voice.speak("System ready.")
 
     def toggle_recording(self, e):
         if not self.is_recording:
-            self.is_recording = True
-            self.mic_icon.name = ft.Icons.STOP
-            self.mic_btn.gradient = ft.LinearGradient(colors=[ft.Colors.RED_500, ft.Colors.PINK_600])
-            self.mic_btn.shadow.color = ft.Colors.RED_200
+            self.is_recording = True; self.mic_icon.name = ft.Icons.STOP; self.mic_btn.gradient = ft.LinearGradient(colors=[ft.Colors.RED_500, ft.Colors.PINK_600])
             self.visualizer.opacity = 0.4; self.visualizer.scale = 1.6; self.visualizer.bgcolor = ft.Colors.RED_100
-            self.set_status("LISTENING", ft.Colors.RED_500)
-            self.ears.start_recording()
+            self.set_status("LISTENING", ft.Colors.RED_500); self.ears.start_recording()
         else:
-            self.is_recording = False
-            self.mic_icon.name = ft.Icons.MIC_NONE
-            self.mic_btn.gradient = ft.LinearGradient(colors=[ft.Colors.BLUE_400, ft.Colors.INDIGO_500])
-            self.mic_btn.shadow.color = ft.Colors.BLUE_200
+            self.is_recording = False; self.mic_icon.name = ft.Icons.MIC_NONE; self.mic_btn.gradient = ft.LinearGradient(colors=[ft.Colors.BLUE_400, ft.Colors.INDIGO_500])
             self.visualizer.opacity = 0; self.visualizer.scale = 1.0
-            self.set_status("PROCESSING", ft.Colors.ORANGE_400)
-            self.page.update()
+            self.set_status("PROCESSING", ft.Colors.ORANGE_400); self.page.update()
             threading.Thread(target=self.process_recording, daemon=True).start()
         self.page.update()
 
-    def process_recording(self):
-        transcript = self.ears.stop_recording()
-        if not transcript:
-            self.set_status("READY", ft.Colors.GREEN_500)
-            return
+    def speak_system(self, text, language_code="en"):
+        self.add_log_entry(text, "System", ft.Colors.INDIGO_400)
+        self.voice.speak(text, language_code=language_code)
 
+    def parse_number_word(self, text):
+        text = text.lower()
+        word_map = {'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5, 'six': 6, 'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10}
+        digits = re.findall(r'\d+', text)
+        if digits: return int(digits[0])
+        for word, num in word_map.items():
+            if word in text: return num
+        return None
+
+    # --- MAIN ROUTER & LOGIC ---
+    def process_recording(self):
+        time.sleep(0.5) # Prevent Audio Race Condition
+        transcript = self.ears.stop_recording()
+        if not transcript: self.set_status("READY", ft.Colors.GREEN_500); return
         self.add_log_entry(f"{transcript}", "User", ft.Colors.GREY_700)
         self.set_status("THINKING", ft.Colors.PURPLE_300)
         
+        # 1. Router Call
         intent_data = determine_intent(transcript)
         action = intent_data.action
-        self.add_log_entry(f"Intent: {action}", "System", ft.Colors.BLUE_GREY_400)
+        
+        # 2. Lang extraction (This is where your error was!)
+        lang = intent_data.language # 'en' or 'hi'
+        
+        self.add_log_entry(f"Action: {action} | Lang: {lang} | Params: {intent_data.keywords}", "Intent", ft.Colors.BLUE_GREY_400)
 
-        # --- INTELLIGENT ROUTING ---
         if action == "ANALYZE_NEW":
-            # New Request: Fetch new data (use_cache=False)
-            self.run_analysis_workflow(use_cache=False)
-            
-        elif action == "GET_SENTIMENT_STATS":
-            self.run_sentiment_report()
+            if lang == "hi": self.speak_system("Thik hai. Inbox scan kar raha hoon.", language_code="hi")
+            else: self.speak_system("Sure, scanning your inbox now.")
+            self.run_analysis_workflow(use_cache=False, language=lang)
             
         elif action == "SUMMARIZE_HINDI":
-            # Smart Request: Use existing memory (use_cache=True)
-            if not self.cached_analyses:
-                self.voice.speak("Mere paas koi purana data nahi hai. Pehle 'Start Analysis' kahein.", language_code="hi")
+            target = intent_data.keywords
+            if target and target.lower() != "none":
+                self.explain_specific_email_hindi(target)
             else:
-                self.voice.speak("Thik hai. Main pichli report Hindi mein batata hoon.", language_code="hi")
+                self.speak_system("Thik hai.", language_code="hi")
                 self.run_analysis_workflow(language="hi", use_cache=True)
-        
-        elif action == "FILTER_BY_CATEGORY":
-             # Smart Request: Filter NEW data (or you could filter cached if you prefer)
-             self.voice.speak(f"Looking for emails about {intent_data.keywords}.")
-             self.run_analysis_workflow(filter_keyword=intent_data.keywords, use_cache=False)
+                
+        elif action == "GET_SENTIMENT_STATS": self.run_sentiment_report()
+        elif action == "FILTER_BY_CATEGORY": self.run_analysis_workflow(filter_keyword=intent_data.keywords, use_cache=False)
+        elif action == "DRAFT_REPLY": self.run_drafting_workflow(intent_data.keywords)
+        elif action == "EXIT": self.speak_system("Goodbye."); self.page.window_close()
+        else: self.speak_system("I didn't understand."); self.set_status("READY", ft.Colors.GREEN_500)
 
-        elif action == "EXIT":
-            self.voice.speak("Goodbye.")
-            self.page.window_close()
-        else:
-            self.voice.speak("I am not sure what you mean.")
-            self.set_status("READY", ft.Colors.GREEN_500)
-
-    # --- THE CORE WORKFLOW (NOW WITH MEMORY) ---
+    # --- CORE WORKFLOW ---
     def run_analysis_workflow(self, language="en", filter_keyword=None, use_cache=False):
         self.set_status("ANALYZING", ft.Colors.PURPLE_500)
         
-        # 1. Decide Source: Cache vs Fresh
+        # 1. Clear Columns
+        self.col_positive.controls.clear()
+        self.col_neutral.controls.clear()
+        self.col_negative.controls.clear()
+        
+        # 2. Data Phase
         if use_cache and self.cached_analyses:
-            # MEMORY MODE
-            analyses = self.cached_analyses
-            self.add_log_entry("Using cached data from memory.", "System", ft.Colors.BLUE_GREY_400)
+            analyses_data = self.cached_analyses
         else:
-            # FRESH MODE
-            if not filter_keyword and language == "en":
-                self.voice.speak("Scanning inbox.")
-            
             try:
                 email_bot = EmailManager()
-                fetch_count = 10 if filter_keyword else 5
-                emails = email_bot.fetch_recent_emails(count=fetch_count)
-                
+                emails = email_bot.fetch_recent_emails(count=6)
                 if not emails:
-                    msg = "No new emails." if language == "en" else "Koi naye email nahi hain."
-                    self.voice.speak(msg, language_code=language)
-                    self.set_status("READY", ft.Colors.GREEN_500)
-                    return
-
-                # Perform Fresh Analysis
-                analyses = []
-                for mail in emails:
+                    self.speak_system("No emails found.", language_code=language); self.set_status("READY", ft.Colors.GREEN_500); return
+                
+                analyses_data = []
+                for i, mail in enumerate(emails):
                     full_text = f"Subject: {mail['subject']}\nFrom: {mail['sender']}\nContent: {mail['snippet']}"
                     analysis_result = analyze_email(full_text)
-                    # We store the 'mail' object too if needed, but for now just the result
-                    analyses.append(analysis_result)
-                    
-                    # Log to sheets only on fresh run
                     email_bot.log_to_sheet(analysis_result)
-
-                # UPDATE MEMORY
-                self.cached_analyses = analyses
-                
+                    analyses_data.append({'id': i+1, 'data': analysis_result})
+                    self.add_dashboard_card(i+1, analysis_result) # Instant Render
+                    self.page.update() 
+                self.cached_analyses = analyses_data
             except Exception as e:
-                self.add_log_entry(f"Error: {e}", "System", ft.Colors.RED)
-                self.voice.speak("An error occurred.")
-                self.set_status("READY", ft.Colors.GREEN_500)
-                return
+                self.speak_system("Error occurred."); print(e); return
 
-        # 2. Process Results (Works for both Fresh and Cached)
+        # 3. Speech Phase
+        if use_cache:
+            for item in analyses_data:
+                if filter_keyword and filter_keyword.lower() not in (item['data'].category + item['data'].summary).lower(): continue
+                self.add_dashboard_card(item['id'], item['data'])
+            self.page.update()
+
         negative_count = 0
-        summaries_to_speak = []
-        matched_count = 0
+        summaries = []
+        for item in analyses_data:
+            analysis = item['data']
+            if filter_keyword and filter_keyword.lower() not in (analysis.category + analysis.summary).lower(): continue 
 
-        for analysis in analyses:
-            # Filter Logic
-            if filter_keyword:
-                search_blob = f"{analysis.category} {analysis.summary}".lower()
-                if filter_keyword.lower() not in search_blob:
-                    continue 
+            text = f"Email {item['id']} from {analysis.customer_name}: {analysis.summary}. Recommendation: {analysis.recommendation}"
+            if filter_keyword: summaries.append(text)
+            elif analysis.sentiment == "Negative": negative_count += 1; summaries.append(text)
 
-            matched_count += 1
-            
-            # UI Card
-            color = ft.Colors.RED_50 if analysis.sentiment == "Negative" else ft.Colors.GREEN_50
-            border = ft.Colors.RED_200 if analysis.sentiment == "Negative" else ft.Colors.GREEN_200
-            icon_c = ft.Colors.RED_400 if analysis.sentiment == "Negative" else ft.Colors.GREEN_400
-            
-            # Only add cards if we are doing a fresh run OR if it's a specific filter request
-            # (To avoid spamming UI on every language switch)
-            if not use_cache or filter_keyword:
-                card_body = f"{analysis.summary}\n\n💡 Action: {analysis.recommendation}\n🎭 Tone: {analysis.tone}"
-                self.add_log_card(analysis.customer_name, analysis.sentiment, card_body, color, border, icon_c)
-
-            # Speech Logic
-            spoken_text = f"From {analysis.customer_name}: {analysis.summary}. Recommendation: {analysis.recommendation}"
-
-            if filter_keyword:
-                summaries_to_speak.append(spoken_text)
-            else:
-                if analysis.sentiment == "Negative":
-                    negative_count += 1
-                    summaries_to_speak.append(spoken_text)
-
-        # 3. Final Report
-        if filter_keyword:
-            if matched_count == 0:
-                self.voice.speak(f"I checked memory, but none were about {filter_keyword}.")
-            else:
-                self.voice.speak(f"I found {matched_count} emails regarding {filter_keyword}.")
-                for s in summaries_to_speak:
-                    self.voice.speak(s)
-                    time.sleep(0.5)
+        if language == "hi":
+             self.speak_system(f"Mujhe {negative_count} negative emails mile hain.", language_code="hi")
+             if negative_count > 0: self.speak_system("Kripya check karein.", language_code="hi")
         else:
-            if language == "hi":
-                self.voice.speak(f"Mujhe {negative_count} negative emails mile hain.", language_code="hi")
-                if negative_count > 0:
-                    self.voice.speak("Kripya turant check karein.", language_code="hi")
+            if summaries:
+                self.speak_system(f"Analysis complete.")
+                for s in summaries: self.voice.speak(s); time.sleep(0.5)
             else:
-                if negative_count > 0:
-                    self.voice.speak(f"Alert. Found {negative_count} negative reviews.")
-                    for s in summaries_to_speak:
-                        self.voice.speak(s)
-                        time.sleep(0.5)
-                else:
-                    self.voice.speak("All recent feedback is positive.")
+                self.speak_system("All recent feedback is positive.")
         
         self.set_status("READY", ft.Colors.GREEN_500)
 
-    def run_sentiment_report(self):
-        # Use Cache if available!
-        if self.cached_analyses:
-            source = self.cached_analyses
-            self.add_log_entry("Generating stats from memory...", "System", ft.Colors.PURPLE_300)
+    # --- HINDI & DRAFTING HELPERS ---
+    def explain_specific_email_hindi(self, target_keyword):
+        self.set_status("TRANSLATING", ft.Colors.ORANGE_400)
+        target_id = self.parse_number_word(target_keyword)
+        target_item = None
+        
+        if target_id:
+            for item in self.cached_analyses:
+                if item['id'] == target_id: target_item = item; break
         else:
-            self.voice.speak("I need to scan emails first. Say 'Start Analysis'.")
-            return
+             for item in self.cached_analyses:
+                if target_keyword.lower() in item['data'].customer_name.lower(): target_item = item; break
+
+        if not target_item:
+            self.speak_system(f"Email {target_keyword} nahi mila.", language_code="hi")
+            self.set_status("READY", ft.Colors.GREEN_500); return
+
+        original_summary = target_item['data'].summary
+        hindi_summary = translate_to_hindi(original_summary)
+        
+        self.speak_system(f"Email {target_item['id']} ka summary:", language_code="hi")
+        self.speak_system(hindi_summary, language_code="hi")
+        self.set_status("READY", ft.Colors.GREEN_500)
+
+    def run_drafting_workflow(self, target_keyword):
+        self.set_status("DRAFTING", ft.Colors.ORANGE_500)
+        target_id = self.parse_number_word(target_keyword)
+        target_item = None
+        
+        if target_id:
+            self.speak_system(f"Drafting for email #{target_id}...")
+            for item in self.cached_analyses:
+                if item['id'] == target_id: target_item = item; break
+        else:
+            self.speak_system(f"Drafting for {target_keyword}...")
+            for item in self.cached_analyses:
+                if target_keyword.lower() in item['data'].customer_name.lower(): target_item = item; break
+        
+        if not target_item:
+            self.speak_system(f"I couldn't find that email."); self.set_status("READY", ft.Colors.GREEN_500); return
+
+        analysis = target_item['data']
+        reply_body = generate_email_reply(analysis.customer_name, analysis.summary, analysis.sentiment)
+        email_bot = EmailManager()
+        success = email_bot.create_draft(to_email="customer@example.com", subject=f"Re: Support (Ref #{target_item['id']})", body_text=reply_body)
+        
+        if success: self.speak_system(f"Draft created successfully.")
+        else: self.speak_system("Failed to create draft.")
+        self.set_status("READY", ft.Colors.GREEN_500)
+
+    def run_sentiment_report(self):
+        if self.cached_analyses:
+            source = self.cached_analyses; self.add_log_entry("Generating stats...", "System", ft.Colors.PURPLE_300)
+        else: self.speak_system("Please scan emails first."); return
 
         pos, neg, neu = 0, 0, 0
-        for a in source:
+        for item in source:
+            a = item['data']
             if a.sentiment == "Negative": neg += 1
             elif a.sentiment == "Positive": pos += 1
             else: neu += 1
         
-        report = f"In the current session: {pos} positive, {neg} negative, {neu} neutral."
-        self.voice.speak(report)
+        report = f"Session Stats: {pos} positive, {neg} negative, {neu} neutral."
+        self.speak_system(report)
         self.set_status("READY", ft.Colors.GREEN_500)
 
     # --- UI HELPERS ---
-    def set_status(self, text, color):
-        self.status_text.value = text; self.status_text.color = color; self.status_ring.bgcolor = color; self.page.update()
+    def add_dashboard_card(self, ID, analysis):
+        if analysis.sentiment == "Positive":
+            bg = ft.Colors.GREEN_50; border = ft.Colors.GREEN_200; icon = ft.Colors.GREEN_600; col_ref = self.col_positive
+        elif analysis.sentiment == "Negative":
+            bg = ft.Colors.RED_50; border = ft.Colors.RED_200; icon = ft.Colors.RED_600; col_ref = self.col_negative
+        else:
+            bg = ft.Colors.BLUE_50; border = ft.Colors.BLUE_200; icon = ft.Colors.BLUE_600; col_ref = self.col_neutral
+
+        card = ft.Container(
+            content=ft.Column([
+                ft.Row([
+                    ft.Container(content=ft.Text(f"#{ID}", weight="bold", color=ft.Colors.WHITE, size=10), bgcolor=icon, padding=5, border_radius=5),
+                    ft.Text(analysis.customer_name, weight="bold", color=ft.Colors.GREY_800, size=12, no_wrap=True, overflow=ft.TextOverflow.ELLIPSIS),
+                ]),
+                ft.Container(height=5),
+                ft.Text(analysis.summary, size=11, color=ft.Colors.GREY_700),
+                ft.Divider(height=10, color=ft.Colors.TRANSPARENT),
+                ft.Row([ft.Icon(ft.Icons.PSYCHOLOGY, size=12, color=ft.Colors.GREY_500), ft.Text(f"Tone: {analysis.tone}", size=10, color=ft.Colors.GREY_500)])
+            ]),
+            bgcolor=bg, padding=10, border_radius=10, border=ft.border.all(1, border), animate_opacity=300
+        )
+        col_ref.controls.append(card)
+    
+    def set_status(self, text, color): self.status_text.value = text; self.status_text.color = color; self.status_ring.bgcolor = color; self.page.update()
     def add_log_entry(self, message, sender, color=ft.Colors.GREY_800):
-        self.mini_log_list.controls.append(ft.Text(f"{sender}: {message}", color=color, font_family="Roboto", size=13))
         self.log_history.append({"msg": message, "sender": sender, "color": color, "type": "text"})
-        self.page.update()
-    def add_log_card(self, title, sentiment, body, bg_color, border_color, icon_color):
-        card = ft.Container(content=ft.Column([ft.Row([ft.Icon(ft.Icons.PERSON, size=18, color=icon_color), ft.Text(title, weight="bold", color=ft.Colors.GREY_900), ft.Container(expand=True), ft.Container(content=ft.Text(sentiment, size=10, color=icon_color, weight="bold"), bgcolor=ft.Colors.WHITE, padding=5, border_radius=5)]), ft.Container(height=5), ft.Text(body, size=13, color=ft.Colors.GREY_700)]), bgcolor=bg_color, padding=15, border_radius=15, border=ft.border.all(1, border_color))
-        self.mini_log_list.controls.append(card)
-        self.log_history.append({"type": "card", "title": title, "sentiment": sentiment, "body": body, "bg_color": bg_color, "border_color": border_color, "icon_color": icon_color})
-        self.page.update()
+        if self.content_area.content == self.logs_view: self.refresh_full_logs()
     def refresh_full_logs(self):
         self.full_log_list.controls.clear()
         for item in self.log_history:
             if item["type"] == "text": self.full_log_list.controls.append(ft.Text(f"{item['sender']}: {item['msg']}", color=item['color']))
-            elif item["type"] == "card": self.full_log_list.controls.append(ft.Container(content=ft.Column([ft.Row([ft.Text(f"{item['title']} ({item['sentiment']})", weight="bold", color=item['icon_color'])]), ft.Text(item['body'], size=12, color=ft.Colors.GREY_700)]), bgcolor=item['bg_color'], padding=10, border_radius=10, margin=ft.margin.only(bottom=5), border=ft.border.all(1, item['border_color'])))
         self.page.update()
 
 def main(page: ft.Page): ModernLightApp(page)

@@ -64,6 +64,47 @@ def analyze_email(email_text):
             tone="Neutral",                # Default for error
             recommendation="Check manually" # Default for error
         )
+    
+def generate_email_reply(customer_name, issue_summary, sentiment):
+    """
+    Generates a polite, professional email response.
+    """
+    try:
+        prompt = f"""
+        You are a Customer Service Agent. Write a short, professional email reply to {customer_name}.
+        
+        Context:
+        - The customer is feeling: {sentiment}
+        - Their issue was: "{issue_summary}"
+        
+        Rules:
+        - If Negative, be apologetic and offer help.
+        - If Positive, thank them.
+        - Keep it under 50 words.
+        - Do not include subject line or placeholders like [Your Name].
+        """
+        
+        response = client.models.generate_content(
+            model="gemini-1.5-flash",
+            contents=prompt
+        )
+        return response.text.strip()
+    except Exception:
+        return f"Dear {customer_name},\n\nThank you for your feedback. We are looking into it.\n\nBest,\nSupport Team"
+
+# ... existing code ...
+
+def translate_to_hindi(text):
+    """Translates a short summary into Hindi/Hinglish for voice."""
+    try:
+        prompt = f"Translate this customer service summary into natural conversational Hindi (Hinglish) for a voice assistant to speak:\n\n'{text}'"
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt
+        )
+        return response.text.strip()
+    except Exception:
+        return text # Fallback to English
 
 # --- TESTING BLOCK ---
 if __name__ == "__main__":
