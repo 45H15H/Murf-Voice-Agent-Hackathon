@@ -2,6 +2,7 @@ import os
 import requests
 import pyaudio
 from dotenv import load_dotenv
+import re
 
 load_dotenv()
 
@@ -15,6 +16,25 @@ class VoiceEngine:
         self.channels = 1
         self.format = pyaudio.paInt16
 
+    def _sanitize_text(self, text):
+        """Cleans text to prevent TTS static/artifacts."""
+        if not text: return ""
+        
+        # 1. Replace double/triple dots with a single dot
+        text = re.sub(r'\.{2,}', '.', text)
+        
+        # 2. Fix "Action.. Recommendation" issues
+        text = text.replace("..", ".")
+        
+        # 3. Smooth out the "Recommendation:" transition
+        # Instead of a sharp colon, we make it a sentence flow which sounds better
+        text = text.replace("Recommendation:", "My recommendation is")
+        
+        # 4. Remove weird extra spaces
+        text = re.sub(r'\s+', ' ', text).strip()
+        
+        return text
+
     def speak(self, text, language_code="en"):
         """
         Speaks text using Murf.
@@ -23,7 +43,10 @@ class VoiceEngine:
         """
         if not text: return
 
-        print(f"🗣️ Speaking ({language_code}): {text}")
+
+        # --- CLEAN THE TEXT BEFORE SENDING ---
+        clean_text = self._sanitize_text(text)
+        print(f"🗣️ Speaking ({language_code}): {clean_text}")
 
         # --- 1. VOICE SELECTION ---
         if language_code == "hi":
@@ -45,7 +68,8 @@ class VoiceEngine:
         # Note: If Namrita is NOT a Falcon voice, you might need to change model to "GEN2"
         # But for the hackathon, we keep "FALCON" and hope she is supported.
         payload = {
-            "text": text,
+            # "text": text,
+            "text": clean_text,
             "model": "FALCON",
             "voiceId": selected_voice,
             "multiNativeLocale": locale,
@@ -65,8 +89,25 @@ class VoiceEngine:
             p = pyaudio.PyAudio()
             stream = p.open(format=self.format, channels=self.channels, rate=self.sample_rate, output=True)
 
+            audio_buffer = bytearray()
+            MIN_CHUNK_SIZE = 4096 
+
             for chunk in response.iter_content(chunk_size=1024):
-                if chunk: stream.write(chunk)
+                if chunk:
+                    audio_buffer.extend(chunk)
+                    
+                    # While we have enough data in the buffer, write it out
+                    while len(audio_buffer) >= MIN_CHUNK_SIZE:
+                        # Take the first 4096 bytes
+                        data_to_play = audio_buffer[:MIN_CHUNK_SIZE]
+                        stream.write(bytes(data_to_play))
+                        
+                        # Remove them from the buffer
+                        del audio_buffer[:MIN_CHUNK_SIZE]
+
+            # Play whatever is left in the buffer at the end
+            if len(audio_buffer) > 0:
+                stream.write(bytes(audio_buffer))
 
             stream.stop_stream()
             stream.close()

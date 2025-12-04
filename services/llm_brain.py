@@ -97,11 +97,27 @@ def generate_email_reply(customer_name, issue_summary, sentiment):
 def translate_to_hindi(text):
     """Translates a short summary into Hindi/Hinglish for voice."""
     try:
-        prompt = f"Translate this customer service summary into natural conversational Hindi (Hinglish) for a voice assistant to speak:\n\n'{text}'"
+        # STRICT PROMPT to prevent "Option 1 / Option 2" outputs
+        prompt = f"""
+        You are a strict translation engine for a Voice Assistant. 
+        Translate the following English text into natural, conversational Hinglish (Hindi + English mix).
+        
+        RULES:
+        1. Output ONLY the final translated sentence.
+        2. Do NOT provide "Option 1", "Option 2", or any explanations.
+        3. Do NOT use markdown (no bolding, no bullet points).
+        4. Keep it concise and professional.
+        5. Use Latin script (English alphabet) ONLY. Do NOT use Devanagari script.
+
+        TEXT TO TRANSLATE:
+        "{text}"
+        """
+        
         response = client.models.generate_content(
             model="gemini-2.5-flash",
             contents=prompt
         )
+        # .strip() removes any accidental whitespace/newlines
         return response.text.strip()
     except Exception:
         return text # Fallback to English
