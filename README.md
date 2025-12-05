@@ -85,5 +85,5 @@ python gui_app.py
 
 | Name           | Role                         |
 |----------------|------------------------------|
-| **Khushi B**  | Project Lead & Backend Dev   |
-| **Ashish Singh** | UI/UX & Frontend Developer          |
+| **Khushi B**  | UI/UX & Frontend Developer   |
+| **Ashish Singh** | Project Lead & Backend Dev          |
