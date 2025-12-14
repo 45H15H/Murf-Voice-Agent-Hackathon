@@ -1,5 +1,3 @@
-# Team ID: Murf-250325
-
 # 🎙️ InboxPilot (Customer Feedback Agent)
 ### Built for the Murf Voice Agent Hackathon 2025
 
@@ -8,12 +6,6 @@
 This project is a fully functional **Voice AI Agent** that automates customer service operations. Instead of reading through hundreds of emails, a manager can simply *talk* to their dashboard to analyze sentiment, filter urgency, and even draft replies—all hands-free.
 
 Powered by **Murf Falcon** for ultra-low latency, lifelike speech.
-
-## 🎥 Demo Video
-
-### Click [here](https://drive.google.com/file/d/1PCOb3g3BVP8plNzqOmLcoZNE-4Qpo46-/view?usp=sharingE) to watch the agent in action
-
----
 
 ## 🚀 Key Features
 
@@ -78,12 +70,3 @@ GOOGLE_CREDENTIALS_FILE=credentials.json
 ```bash
 python gui_app.py
 ```
-
----
-
-## 👥 Our Team
-
-| Name           | Role                         |
-|----------------|------------------------------|
-| **Khushi B**  | UI/UX & Frontend Developer   |
-| **Ashish Singh** | Project Lead & Backend Dev          |
